@@ -30,18 +30,21 @@ def read_excel(path: Union[str, os.PathLike], sheet_name: str = None) -> pd.Data
 
 
 def write_excel(data: pd.DataFrame, path: Union[str, os.PathLike], sheet_name: str = None) -> None:
-    pass
+    try:
+        return data.to_excel(path, sheet_name=sheet_name)
+    except Exception:
+        raise errors.WriteExcelError(path)
 
 
-def get_field_dependencies(table: PivotTable) -> Set[str]:
-    dependencies = set()
-
-    fields = table.fields
-    for source in (fields.columns, fields.rows, (value.field for value in fields.values)):
+def get_required_fields(table: PivotTable) -> Set[str]:
+    fields = set()
+    for source in (
+        table.fields.columns, 
+        table.fields.rows, (value.field for value in table.fields.values)
+    ):
         for field in source:
-            dependencies.add(field)
-    
-    return dependencies
+            fields.add(field)
+    return fields
 
 
 class HeaderILocation(NamedTuple):
@@ -115,10 +118,12 @@ def remove_useless_cells(data: pd.DataFrame) -> pd.DataFrame:
     return shrink_to_header(data, header)
 
 
-def validate_contains_fields(available: Iterable[str], fields: Iterable[str]) -> None:
-    missing = set(available).difference(fields)
-    if missing:
-        raise errors.MissingTableFieldsError(available, missing)
+def validate_fields(available: Iterable[str], tables: Iterable[PivotTable]) -> None:
+    for table in tables:
+        required = get_required_fields(table)
+        missing = set(available).difference(required)
+        if missing:
+            raise errors.MissingTableFieldsError(table.name, available, missing)
 
 
 def fill_missing_values(data: pd.DataFrame) -> pd.DataFrame:

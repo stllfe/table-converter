@@ -60,7 +60,8 @@ class HeaderNotFoundError(BaseError):
 class MissingTableFieldsError(BaseError):
     """Raised if an input table doesn't have enough fields for a pivot table."""
     
-    def __init__(self, available: Iterable[str], missing: Iterable[str]) -> None:
+    def __init__(self, table_name: str, available: Iterable[str], missing: Iterable[str]) -> None:
         super().__init__()
+        self.table_name = table_name
         self.missing = set(missing)
         self.available = set(available)
