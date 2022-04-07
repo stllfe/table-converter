@@ -30,11 +30,12 @@ def run(params: Params) -> None:
     data = utils.read_excel(input_path, params.sheet_name)
     data = utils.remove_useless_cells(data)
 
-    # validate it has all the necessary columns
-    utils.validate_fields(data.columns, params.pivot_tables)
-
     # prepare the initial data for pivoting
     data = utils.fill_missing_values(data)
+    data = utils.add_computed_fields(data)
+
+    # validate it has all the necessary columns
+    utils.validate_fields(data.columns, params.pivot_tables)
 
     # store the result
     utils.write_excel(data, output_path, CLEANED_SHEET_NAME)

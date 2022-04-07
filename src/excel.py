@@ -6,17 +6,11 @@ from typing import Union
 from contextlib import contextmanager
 
 import win32com.client as win32
-import win32com.client.constants as win32c
+from win32com.client import constants as win32c
 
+from . import errors
 from .tables import PivotTable
 from .tables import Calculation
-
-
-EXCEL_CALCULATIONS_MAP = {
-    Calculation.SUM: win32c.xlSum,
-    Calculation.AVG: win32c.xlAvg,
-    Calculation.COUNT: win32c.xlCount,
-}
 
 
 def get_excel_instance(visible=False) -> object:
@@ -25,18 +19,36 @@ def get_excel_instance(visible=False) -> object:
     return excel
 
 
+def as_excel_calculation(calc: Calculation) -> object:
+    try:
+        calc_map = {
+            Calculation.SUM: win32c.xlSum,
+            Calculation.AVG: win32c.xlAverage,
+            Calculation.COUNT: win32c.xlCount,
+        }
+        return calc_map[calc]
+    except AttributeError as error:
+        raise errors.ExcelNotAvailableError(error) from None
+    except KeyError:
+        error = NotImplementedError("Got uknown calculation: %s" % calc)
+        raise errors.InternalError(error) from None
+
+
 @contextmanager
 def workbook(filepath: Union[str, os.PathLike], visible: bool = False) -> object:
     filepath = Path(filepath).resolve()
     excel = get_excel_instance(visible)
 
-    workbook = excel.Workbooks.Open(filepath)
+    try:
+        workbook = excel.Workbooks.Open(filepath)
+    except Exception:
+        raise errors.OpenExcelError(filepath) from None
     try:
         yield workbook
         workbook.Save()
     finally:
-        workbook.Cancel()
-        workbook.Close()
+        workbook.Close(True)
+        excel.Quit()
 
 
 def get_sheet(workbook: object, sheet_name: str) -> object:
@@ -94,7 +106,7 @@ def create_pivot_table(workbook: object, worksheet: object, table: PivotTable, s
             .AddDataField(
                 pt.PivotTables(pt.Name).PivotFields(value.field), 
                 value.name, 
-                EXCEL_CALCULATIONS_MAP[value.calculation]
+                as_excel_calculation(value.calculation)
             )
         )
         field.NumberFormat = value.number_format

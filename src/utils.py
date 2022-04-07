@@ -1,9 +1,10 @@
 import os
+from pathlib import Path
 from typing import Any, Iterable, NamedTuple, Optional, Set, Tuple, Union
 
 import pandas as pd
 
-from src.excel import get_excel_instance
+from .excel import get_excel_instance
 
 from . import errors
 from .tables import PivotTable
@@ -24,16 +25,22 @@ def read_excel(path: Union[str, os.PathLike], sheet_name: str = None) -> pd.Data
     try:
         return pd.read_excel(path, sheet_name=sheet_name or 0)
     except FileNotFoundError:
-        raise errors.OpenExcelError(path)
+        raise errors.OpenExcelError(path) from None
     except ValueError:
-        raise errors.SheetNotFoundError(sheet_name)
+        raise errors.SheetNotFoundError(sheet_name) from None
 
 
 def write_excel(data: pd.DataFrame, path: Union[str, os.PathLike], sheet_name: str = None) -> None:
+    path = Path(path).resolve()
     try:
-        return data.to_excel(path, sheet_name=sheet_name)
+        os.remove(path)
+    except FileNotFoundError:
+        pass
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return data.to_excel(path, sheet_name=sheet_name, index=False)
     except Exception:
-        raise errors.WriteExcelError(path)
+        raise errors.WriteExcelError(path) from None
 
 
 def get_required_fields(table: PivotTable) -> Set[str]:
@@ -121,7 +128,7 @@ def remove_useless_cells(data: pd.DataFrame) -> pd.DataFrame:
 def validate_fields(available: Iterable[str], tables: Iterable[PivotTable]) -> None:
     for table in tables:
         required = get_required_fields(table)
-        missing = set(available).difference(required)
+        missing = required.difference(available)
         if missing:
             raise errors.MissingTableFieldsError(table.name, available, missing)
 
@@ -135,3 +142,10 @@ def validate_excel_available() -> None:
         get_excel_instance(visible=False)
     except Exception as error:
         raise errors.ExcelNotAvailableError(error) from None
+
+
+def add_computed_fields(data: pd.DataFrame) -> pd.DataFrame:
+    out = data.copy()
+    out['МНН+Дозировка'] = out[['МНН', 'Дозировка']].apply(lambda r: ', '.join((r.МНН, r.Дозировка)), axis=1)
+    out['Схема на УРНЗ'] = out.groupby('УНРЗ')['МНН+Дозировка'].transform(lambda x: '; '.join(x))
+    return out

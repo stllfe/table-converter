@@ -6,8 +6,11 @@ class BaseError(Exception):
     """The base class for all program-specific errors."""
 
     def __str__(self) -> str:
-        return self.__class__.__name__
-
+        pretty = ['\n']
+        for attr, value in self.__dict__.items():
+            if not attr.startswith('_'):
+                pretty.append(f"\t{attr}:\n\t\t{str(value)}\n")
+        return '\n'.join(pretty)
 
 class InternalError(BaseError):
     """A wrapper for any other default Python exceptions."""
