@@ -1,5 +1,6 @@
 import os
 
+from functools import lru_cache
 from pathlib import Path
 from typing import Union
 
@@ -13,6 +14,7 @@ from .tables import PivotTable
 from .tables import Calculation
 
 
+@lru_cache(2)  # sort of singleton
 def get_excel_instance(visible=False) -> object:
     excel = win32.gencache.EnsureDispatch('Excel.Application')
     excel.Visible = visible
@@ -101,12 +103,12 @@ def create_pivot_table(workbook: object, worksheet: object, table: PivotTable, s
 
     # Sets the Values of the pivot table
     for value in table.fields.values:
+        calculation = as_excel_calculation(value.calculation)
         field = (
             pt.PivotTables(pt.Name)
             .AddDataField(
                 pt.PivotTables(pt.Name).PivotFields(value.field), 
-                value.name, 
-                as_excel_calculation(value.calculation)
+                value.name, calculation
             )
         )
         field.NumberFormat = value.number_format

@@ -1,3 +1,4 @@
+from dataclasses import fields
 import os
 from pathlib import Path
 from typing import Any, Iterable, NamedTuple, Optional, Set, Tuple, Union
@@ -7,7 +8,7 @@ import pandas as pd
 from .excel import get_excel_instance
 
 from . import errors
-from .tables import PivotTable
+from .tables import Calculation, PivotTable, Fields, Value
 
 
 def read_excel(path: Union[str, os.PathLike], sheet_name: str = None) -> pd.DataFrame:
@@ -41,6 +42,10 @@ def write_excel(data: pd.DataFrame, path: Union[str, os.PathLike], sheet_name: s
         return data.to_excel(path, sheet_name=sheet_name, index=False)
     except Exception:
         raise errors.WriteExcelError(path) from None
+
+
+def is_strict_numerical(value: Value) -> bool:
+    return value.calculation != Calculation.COUNT
 
 
 def get_required_fields(table: PivotTable) -> Set[str]:
@@ -125,12 +130,11 @@ def remove_useless_cells(data: pd.DataFrame) -> pd.DataFrame:
     return shrink_to_header(data, header)
 
 
-def validate_fields(available: Iterable[str], tables: Iterable[PivotTable]) -> None:
-    for table in tables:
-        required = get_required_fields(table)
-        missing = required.difference(available)
-        if missing:
-            raise errors.MissingTableFieldsError(table.name, available, missing)
+def validate_fields_exist(available: Iterable[str], table: PivotTable) -> None:
+    required = get_required_fields(table)
+    missing = required.difference(available)
+    if missing:
+        raise errors.MissingTableFieldsError(table.name, available, missing)
 
 
 def fill_missing_values(data: pd.DataFrame) -> pd.DataFrame:
@@ -145,7 +149,27 @@ def validate_excel_available() -> None:
 
 
 def add_computed_fields(data: pd.DataFrame) -> pd.DataFrame:
+    if any(col not in data.columns for col in ('УНРЗ', 'Дозировка', 'МНН')):
+        return data
     out = data.copy()
     out['МНН+Дозировка'] = out[['МНН', 'Дозировка']].apply(lambda r: ', '.join((r.МНН, r.Дозировка)), axis=1)
     out['Схема на УРНЗ'] = out.groupby('УНРЗ')['МНН+Дозировка'].transform(lambda x: '; '.join(x))
     return out
+
+
+def cast_fields_dtypes(data: pd.DataFrame, table: PivotTable) -> pd.DataFrame:
+    fields_to_cast = set(value.field for value in table.fields.values if is_strict_numerical(value))
+
+    for column in data:
+        if column in fields_to_cast and data.dtypes[column] == 'object':
+            data[column] = data[column].astype(float)
+    return data
+
+
+def validate_filepath(path: Union[str, os.PathLike], exists=False, not_empty=False) -> None:
+    if not_empty and not path:
+        raise errors.OpenExcelError(path)
+    if exists and not Path(path).exists():
+        raise errors.OpenExcelError(path)
+    if Path(path).is_dir():
+        raise errors.OpenExcelError(path)

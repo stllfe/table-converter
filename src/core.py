@@ -20,25 +20,25 @@ class Params(NamedTuple):
 
 
 def run(params: Params) -> None:
-    # detect any excel errors early
     utils.validate_excel_available()
+
+    utils.validate_filepath(params.input_path, not_empty=True, exists=True)
+    utils.validate_filepath(params.output_path, not_empty=True)
 
     input_path = Path(params.input_path).resolve()
     output_path = Path(params.output_path).resolve()
  
-    # open a raw file and shrink unnecessary cols/rows
     data = utils.read_excel(input_path, params.sheet_name)
     data = utils.remove_useless_cells(data)
 
-    # prepare the initial data for pivoting
     data = utils.fill_missing_values(data)
     data = utils.add_computed_fields(data)
 
-    # validate it has all the necessary columns
-    utils.validate_fields(data.columns, params.pivot_tables)
+    for table in params.pivot_tables:
+        utils.validate_fields_exist(data.columns, table)
+        data = utils.cast_fields_dtypes(data, table)
 
-    # store the result
-    utils.write_excel(data, output_path, CLEANED_SHEET_NAME)
+    utils.write_excel(data, output_path, CLEANED_SHEET_NAME)  # should save to temp dir
     
     # open again with a native win32 API and create the pivot tables
     with excel.workbook(output_path, EXCEL_VISIBLE) as wb:

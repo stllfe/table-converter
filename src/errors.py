@@ -12,6 +12,7 @@ class BaseError(Exception):
                 pretty.append(f"\t{attr}:\n\t\t{str(value)}\n")
         return '\n'.join(pretty)
 
+
 class InternalError(BaseError):
     """A wrapper for any other default Python exceptions."""
 
