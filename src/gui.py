@@ -9,33 +9,67 @@ from tkinter import ttk
 from tkinter import filedialog as fd
 from tkinter import messagebox
 
-from typing import Any, Callable, Iterable
+from typing import Callable, Iterable
 
 from . import errors
 from .tables import PivotTable
 from .core import Params
 
 
+class Executor:
+
+    def __init__(self, core: Callable[[Params], None], available_tables: Iterable[PivotTable], logger: logging.Logger = None) -> None:
+        self.core = core
+        self.available_tables = available_tables
+        self.logger = logger or logging.getLogger(self.__class__.__name__)
+        self.gui = None
+
+    def bind(self, gui: GUI):
+        self.gui = gui
+
+    def execute(self) -> None:
+        params = self.gui.get_params()
+        self.logger.debug('Запуск с параметрами: %s', params)
+        try:
+            self.core(params)
+        except Exception as error:
+            if not isinstance(error, errors.BaseError):
+                self.logger.error('Неотловленная ошибка! "%s"', str(error))
+                error = errors.InternalError(error)
+            else:
+                self.logger.error('Внутренняя ошибка! Сообщение: "%s"', error)
+            self.gui.handle_error(error)
+            return
+        self.gui.handle_finish()
+
+
+
 class GUI(abc.ABC):
 
-    def __init__(self, available_tables: Iterable[PivotTable], core_func: Callable[[Params], None], logger: logging.Logger = None) -> None:
+    def __init__(self, executor: Executor) -> None:
         super().__init__()
-        self._available_tables = available_tables
-        self._core_func = core_func
-        self._logger = logger or logging.getLogger(self.__class__.__name__)
+
+        self.executor = executor
+        self.executor.bind(self)
+
+        self.build()
 
     def __enter__(self) -> GUI:
-        return self.create()
+        return self.build()
 
     def __exit__(self, *exc_info) -> None:
         return self.destroy()
 
     @abc.abstractmethod
-    def handle_error(self, error: Exception) -> None:
+    def handle_error(self, error: errors.BaseError) -> None:
+        pass
+
+    @abc.abstractclassmethod
+    def handle_finish(self) -> None:
         pass
     
     @abc.abstractmethod
-    def create(self) -> GUI:
+    def build(self) -> GUI:
         pass
 
     @abc.abstractmethod
@@ -46,18 +80,9 @@ class GUI(abc.ABC):
     def get_params(self) -> Params:
         pass
 
-    def execute(self) -> None:
-        params = self.get_params()
-        self._logger.debug('running with params %s', params)
-        try:
-            self._core_func(params)
-        except Exception as error:
-            if not isinstance(error, errors.BaseError):
-                self._logger.error('unhandled internal error: "%s"', str(error))
-                error = errors.InternalError(error)
-            else:
-                self._logger.error("core error '%s' occured, trying to handle with the GUI...", error)
-            self.handle_error(error)
+    @abc.abstractmethod
+    def run(self) -> None:
+        pass
 
 
 class Placeholder(ttk.Entry):
@@ -94,47 +119,7 @@ class TkinterGUI(GUI):
     FD_FILETYPES = [('Excel', ('.xlsx', '.xls', '.xlsb', '.xlsm'))]
     FD_DEFAULT_EXT = '.xlsx'
 
-    def set_entry_from_filedialog(self, entry: ttk.Entry, dialog: Callable) -> None:
-        if not entry.get():
-            value = dialog(
-                parent=self.window, 
-                initialdir=self.FD_INITIAL_DIR, 
-                filetypes=self.FD_FILETYPES,
-                defaultextension=self.FD_DEFAULT_EXT,
-            )
-            entry.insert(0, value)
-            
-    def set_input_path_from_filedialog(self, *event) -> None:
-        self.set_entry_from_filedialog(self.input_path, fd.askopenfilename)
-
-    def set_output_path_from_filedialog(self, *event) -> None:
-        self.set_entry_from_filedialog(self.output_path, fd.asksaveasfilename)
-
-    def configure(self) -> None:
-        self.input_path.bind('<Button-1>', self.set_input_path_from_filedialog)
-        self.output_path.bind('<Button-1>', self.set_output_path_from_filedialog)
-        self.cancel.configure(command=self.window.destroy)
-        self.start.configure(command=self.execute)
-
-    def destroy(self) -> None:
-        try:
-            return self.window.destroy()
-        except tk.TclError:
-            pass
-
-    def get_params(self) -> Params:
-        pivot_tables = [table for table, variable in self.checked_tables.items() if variable.get()]
-        return Params(
-            input_path=self.input_path.get(),
-            output_path=self.output_path.get(),
-            sheet_name=self.sheet_name.get(),
-            pivot_tables=pivot_tables,
-        )
-    
-    def handle_error(self, error: Exception) -> None:
-        pass
-
-    def create(self) -> GUI:
+    def build(self) -> GUI:
         from ctypes import windll
         windll.shcore.SetProcessDpiAwareness(2)
 
@@ -178,7 +163,7 @@ class TkinterGUI(GUI):
         for child in self.frame.winfo_children(): 
             child.grid_configure(padx=4, pady=2)
 
-        self.checked_tables = {table: tk.BooleanVar(value=True) for table in self._available_tables}
+        self.checked_tables = {table: tk.BooleanVar(value=True) for table in self.executor.available_tables}
         for idx, (table, variable) in enumerate(self.checked_tables.items()):
             ttk.Checkbutton(self.tables_label_frame, text=table.name, variable=variable).grid(row=5 + idx, column=0, sticky=tk.W)
 
@@ -189,4 +174,49 @@ class TkinterGUI(GUI):
         self.cancel.grid(row=7, column=2, sticky=(tk.W, tk.E), padx=4, pady=16)
 
         self.configure()
+
+    def configure(self) -> None:
+        self.input_path.bind('<Button-1>', self.set_input_path_from_filedialog)
+        self.output_path.bind('<Button-1>', self.set_output_path_from_filedialog)
+        self.cancel.configure(command=self.window.destroy)
+        self.start.configure(command=self.executor.execute)
+
+    def set_entry_from_filedialog(self, entry: ttk.Entry, dialog: Callable) -> None:
+        if not entry.get():
+            value = dialog(
+                parent=self.window, 
+                initialdir=self.FD_INITIAL_DIR, 
+                filetypes=self.FD_FILETYPES,
+                defaultextension=self.FD_DEFAULT_EXT,
+            )
+            entry.insert(0, value)
+            
+    def set_input_path_from_filedialog(self, *event) -> None:
+        self.set_entry_from_filedialog(self.input_path, fd.askopenfilename)
+
+    def set_output_path_from_filedialog(self, *event) -> None:
+        self.set_entry_from_filedialog(self.output_path, fd.asksaveasfilename)
+
+    def destroy(self) -> None:
+        try:
+            return self.window.destroy()
+        except tk.TclError:
+            pass
+
+    def get_params(self) -> Params:
+        pivot_tables = [table for table, variable in self.checked_tables.items() if variable.get()]
+        return Params(
+            input_path=self.input_path.get(),
+            output_path=self.output_path.get(),
+            sheet_name=self.sheet_name.get(),
+            pivot_tables=pivot_tables,
+        )
+    
+    def handle_error(self, error: errors.BaseError) -> None:
+        messagebox.showerror(title=f"Ошибка {error.name}", message=error.msg)
+
+    def handle_finish(self) -> None:
+        messagebox.showinfo(title='Статус обработки', message='Отчет сформирован успешно!')
+
+    def run(self) -> None:
         self.window.mainloop()
