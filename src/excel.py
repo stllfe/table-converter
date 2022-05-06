@@ -14,7 +14,7 @@ from .tables import PivotTable
 from .tables import Calculation
 
 
-@lru_cache(2)  # sort of singleton
+@lru_cache  # sort of singleton
 def get_excel_instance(visible=False) -> object:
     excel = win32.gencache.EnsureDispatch('Excel.Application')
     excel.Visible = visible

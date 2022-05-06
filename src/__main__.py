@@ -5,7 +5,7 @@ from .gui import Executor, TkinterGUI
 from .tables import tables
 
 
-logging.basicConfig()
+logging.basicConfig(level=logging.DEBUG)
 
 
 if __name__ == '__main__':

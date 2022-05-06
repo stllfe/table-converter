@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import abc
 import logging
+import threading
 
 import tkinter as tk
+import multiprocessing as mp
 
 from tkinter import ttk
 from tkinter import filedialog as fd
 from tkinter import messagebox
+import traceback
 
 from typing import Callable, Iterable
 
@@ -16,7 +19,31 @@ from .tables import PivotTable
 from .core import Params
 
 
+class Process(mp.Process):
+    """A process that keeps the info about exception."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._pconn, self._cconn = mp.Pipe()
+        self._exception = None
+    
+    def run(self) -> None:
+        try:
+            mp.Process.run(self)
+            self._cconn.send(None)
+        except Exception as e:
+            tb = traceback.format_exc()
+            self._cconn.send((e, tb))
+    
+    @property
+    def exception(self):
+        if self._pconn.poll():
+            self._exception = self._pconn.recv()
+        return self._exception
+
+
 class Executor:
+    """Executes the core function in the given GUI."""
 
     def __init__(self, core: Callable[[Params], None], available_tables: Iterable[PivotTable], logger: logging.Logger = None) -> None:
         self.core = core
@@ -30,18 +57,22 @@ class Executor:
     def execute(self) -> None:
         params = self.gui.get_params()
         self.logger.debug('Запуск с параметрами: %s', params)
-        try:
-            self.core(params)
-        except Exception as error:
-            if not isinstance(error, errors.BaseError):
-                self.logger.error('Неотловленная ошибка! "%s"', str(error))
-                error = errors.InternalError(error)
-            else:
-                self.logger.error('Внутренняя ошибка! Сообщение: "%s"', error)
-            self.gui.handle_error(error)
-            return
-        self.gui.handle_finish()
 
+        process = Process(target=self.core, args=(params,))
+        process.start()
+        process.join()
+
+        if not process.exception:
+            return self.gui.handle_finish()
+
+        error, trace = process.exception
+        if not isinstance(error, errors.BaseError):
+            self.logger.error('Неотловленная ошибка! "%s": "%s"', str(error), trace)
+            error = errors.InternalError(error)
+        else:
+            self.logger.error('Внутренняя ошибка! Сообщение: "%s"', error)
+
+        self.gui.handle_error(error)
 
 
 class GUI(abc.ABC):
@@ -142,7 +173,7 @@ class TkinterGUI(GUI):
         self.input_label = ttk.Label(self.frame, text='Путь до исходного файла', justify=tk.LEFT)
         self.input_label.grid(row=0, column=0, sticky=tk.W)
 
-        self.input_path = Placeholder(self.frame, justify=tk.LEFT, width=32)
+        self.input_path = ttk.Entry(self.frame, justify=tk.LEFT, width=32)
         self.input_path.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E))
 
         self.sheet_label = ttk.Label(self.frame, text='Лист')
@@ -154,7 +185,7 @@ class TkinterGUI(GUI):
         self.output_label = ttk.Label(self.frame, text='Путь сохранения результата', justify=tk.LEFT)
         self.output_label.grid(row=2, column=0, columnspan=2, sticky=tk.W)
 
-        self.output_path = Placeholder(self.frame, justify=tk.LEFT, width=32)
+        self.output_path = ttk.Entry(self.frame, justify=tk.LEFT, width=32)
         self.output_path.grid(row=3, column=0, columnspan=2, sticky=(tk.W, tk.E))
 
         self.tables_label_frame = ttk.LabelFrame(self.frame, text='Отчеты')
@@ -175,13 +206,42 @@ class TkinterGUI(GUI):
 
         self.configure()
 
+    def set_state(self, widget: tk.Widget, state: str):
+        print(type(widget))
+        try:
+            widget.configure(state=state)
+        except tk.TclError:
+            pass
+        for child in widget.winfo_children():
+            self.set_state(child, state=state)
+
+    def disable(self) -> None:
+        self.set_state(self.frame, tk.DISABLED)
+    
+    def enable(self) -> None:
+        self.set_state(self.frame, tk.NORMAL)
+
+    def on_execution(self) -> None:
+        
+        def target():
+            self.disable()
+            try:
+                self.executor.execute()
+            finally:
+                self.enable()
+
+        thread = threading.Thread(target=target)
+        thread.start()
+
     def configure(self) -> None:
         self.input_path.bind('<Button-1>', self.set_input_path_from_filedialog)
         self.output_path.bind('<Button-1>', self.set_output_path_from_filedialog)
         self.cancel.configure(command=self.window.destroy)
-        self.start.configure(command=self.executor.execute)
+        self.start.configure(command=self.on_execution)
 
     def set_entry_from_filedialog(self, entry: ttk.Entry, dialog: Callable) -> None:
+        if entry.instate((tk.DISABLED,)):
+            return
         if not entry.get():
             value = dialog(
                 parent=self.window, 
@@ -190,7 +250,7 @@ class TkinterGUI(GUI):
                 defaultextension=self.FD_DEFAULT_EXT,
             )
             entry.insert(0, value)
-            
+
     def set_input_path_from_filedialog(self, *event) -> None:
         self.set_entry_from_filedialog(self.input_path, fd.askopenfilename)
 
