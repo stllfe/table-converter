@@ -10,7 +10,6 @@ import multiprocessing as mp
 from tkinter import ttk
 from tkinter import filedialog as fd
 from tkinter import messagebox
-import traceback
 
 from typing import Callable, Iterable
 
@@ -32,8 +31,7 @@ class Process(mp.Process):
             mp.Process.run(self)
             self._cconn.send(None)
         except Exception as e:
-            tb = traceback.format_exc()
-            self._cconn.send((e, tb))
+            self._cconn.send(e)
     
     @property
     def exception(self):
@@ -65,9 +63,9 @@ class Executor:
         if not process.exception:
             return self.gui.handle_finish()
 
-        error, trace = process.exception
+        error = process.exception
         if not isinstance(error, errors.BaseError):
-            self.logger.error('Неотловленная ошибка! "%s": "%s"', str(error), trace)
+            self.logger.error('Неотловленная ошибка! "%s"', str(error))
             error = errors.InternalError(error)
         else:
             self.logger.error('Внутренняя ошибка! Сообщение: "%s"', error)
@@ -207,7 +205,6 @@ class TkinterGUI(GUI):
         self.configure()
 
     def set_state(self, widget: tk.Widget, state: str):
-        print(type(widget))
         try:
             widget.configure(state=state)
         except tk.TclError:
@@ -221,7 +218,7 @@ class TkinterGUI(GUI):
     def enable(self) -> None:
         self.set_state(self.frame, tk.NORMAL)
 
-    def on_execution(self) -> None:
+    def execute_nonblocking(self) -> None:
         
         def target():
             self.disable()
@@ -237,7 +234,7 @@ class TkinterGUI(GUI):
         self.input_path.bind('<Button-1>', self.set_input_path_from_filedialog)
         self.output_path.bind('<Button-1>', self.set_output_path_from_filedialog)
         self.cancel.configure(command=self.window.destroy)
-        self.start.configure(command=self.on_execution)
+        self.start.configure(command=self.execute_nonblocking)
 
     def set_entry_from_filedialog(self, entry: ttk.Entry, dialog: Callable) -> None:
         if entry.instate((tk.DISABLED,)):

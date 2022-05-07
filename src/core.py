@@ -10,6 +10,7 @@ from .tables import PivotTable
 CLEANED_SHEET_NAME = 'Исходный лист'
 EXCEL_VISIBLE = False
 SHOW_PIVOT_ANNOTATIONS = False
+HEADER_SEARCH_NROWS = 15
 
 
 class Params(NamedTuple):
@@ -29,8 +30,8 @@ def run(params: Params) -> None:
     output_path = Path(params.output_path).resolve()
  
     data = utils.read_excel(input_path, params.sheet_name)
-    data = utils.remove_useless_cells(data)
-
+    
+    data = utils.shrink_to_header(data, utils.find_header(data, HEADER_SEARCH_NROWS))
     data = utils.fill_missing_values(data)
     data = utils.add_computed_fields(data)
 

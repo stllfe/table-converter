@@ -14,7 +14,7 @@ from .tables import PivotTable
 from .tables import Calculation
 
 
-@lru_cache  # sort of singleton
+@lru_cache(None)  # sort of singleton
 def get_excel_instance(visible=False) -> object:
     excel = win32.gencache.EnsureDispatch('Excel.Application')
     excel.Visible = visible
@@ -63,7 +63,7 @@ def create_new_sheet(workbook: object, name: str) -> object:
 
 
 def create_pivot_table(workbook: object, worksheet: object, table: PivotTable, show_annotations: bool = False) -> object:
-    """
+    """Creates a pivot table in the given workbook from the given worksheet.
 
     Args:
         workbook: A workbook reference.

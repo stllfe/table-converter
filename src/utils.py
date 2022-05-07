@@ -1,4 +1,3 @@
-from dataclasses import fields
 import os
 from pathlib import Path
 from typing import Any, Iterable, NamedTuple, Optional, Set, Tuple, Union
@@ -65,7 +64,7 @@ class HeaderILocation(NamedTuple):
     end_col: int
 
 
-def find_header(data: pd.DataFrame, search_nrows=100) -> Optional[HeaderILocation]:
+def find_header(data: pd.DataFrame, search_nrows=15) -> Optional[HeaderILocation]:
     """Finds the row and cols that are more likely to be a header
     in a sparse table with lots of empty cells.
 
@@ -74,6 +73,9 @@ def find_header(data: pd.DataFrame, search_nrows=100) -> Optional[HeaderILocatio
     Args:
         data: A sparse dataframe with lots of empty cells.
         search_nrows: How many rows to go through with a linear search.
+
+    Raises:
+        HeaderNotFoundError: If no header can be found.
     
     Returns:
         A tuple with the row, start column, end column indices.
@@ -111,23 +113,17 @@ def find_header(data: pd.DataFrame, search_nrows=100) -> Optional[HeaderILocatio
             header = (i, *span)
         if i == search_nrows - 1:
             break
+
+    if not header:
+        raise errors.HeaderNotFoundError()
     
-    return HeaderILocation(*header) if header else None
+    return HeaderILocation(*header)
 
 
 def shrink_to_header(data: pd.DataFrame, header: HeaderILocation) -> pd.DataFrame:
     out = data.iloc[header.row + 1:, header.start_col:header.end_col].copy()
     out.columns = data.iloc[header.row, header.start_col:header.end_col].values
     return out.reset_index(drop=True)
-
-
-def remove_useless_cells(data: pd.DataFrame) -> pd.DataFrame:
-    header = find_header(data)
-    
-    if not header:
-        raise errors.HeaderNotFoundError()
-
-    return shrink_to_header(data, header)
 
 
 def validate_fields_exist(available: Iterable[str], table: PivotTable) -> None:
@@ -152,8 +148,12 @@ def add_computed_fields(data: pd.DataFrame) -> pd.DataFrame:
     if any(col not in data.columns for col in ('УНРЗ', 'Дозировка', 'МНН')):
         return data
     out = data.copy()
+    
     out['МНН+Дозировка'] = out[['МНН', 'Дозировка']].apply(lambda r: ', '.join((r.МНН, r.Дозировка)), axis=1)
     out['Схема на УРНЗ'] = out.groupby('УНРЗ')['МНН+Дозировка'].transform(lambda x: '; '.join(x))
+
+    last_rows = out.groupby('УНРЗ').tail(1).index
+    out.loc[~out.index.isin(last_rows), 'Схема на УРНЗ'] = pd.NA
     return out
 
 

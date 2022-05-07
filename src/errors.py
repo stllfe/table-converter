@@ -19,7 +19,7 @@ class InternalError(BaseError):
 
     def __init__(self, source: Exception) -> None:
         self.orig_name = source.__class__.__name__
-        super().__init__(f'Внутренняя ошибка программы: "{source}"')
+        super().__init__(f'Внутренняя ошибка программы {self.orig_name}: "{source}"')
 
 
 class ExcelNotAvailableError(BaseError):
@@ -76,13 +76,12 @@ class HeaderNotFoundError(BaseError):
 class MissingTableFieldsError(BaseError):
     """Raised if an input table doesn't have enough fields for a pivot table."""
     
-    def __init__(self, table_name: str, available: Iterable[str], missing: Iterable[str]) -> None:
+    def __init__(self, table_name: str, available: Iterable[str] = (), missing: Iterable[str] = ()) -> None:
         self.table_name = table_name
-        self.missing = set(missing)
-        self.available = set(available)
+        self.available = tuple(set(available))
+        self.missing = tuple(set(missing))
         super().__init__(
             f'Во входном файле Excel не найдены необходимые колонки для формирования отчета "{self.table_name}"!\n'
-            'Доступные колонки: ' + '", "'.join(self.available) + '.\n'
-            'Необходимые колонки: ' + '", "'.join(self.missing) + '.\n\n'
-            'Убедитесь, что имена колонок во входном файле совпадают или укажите другой отчет!'
+            'Необходимые колонки: "%s"' % '", "'.join(self.missing) + '.\n\n'
+            'Убедитесь, что имена колонок во входном файле подходят или укажите другой отчет!'
         )
