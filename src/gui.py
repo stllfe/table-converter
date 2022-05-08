@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import abc
+import base64
+import os
 import logging
 import threading
 
 import tkinter as tk
 import multiprocessing as mp
+import sys
 
 from tkinter import ttk
 from tkinter import filedialog as fd
@@ -16,6 +19,7 @@ from typing import Callable, Iterable
 from . import errors
 from .tables import PivotTable
 from .core import Params
+from .icon import img
 
 
 class Process(mp.Process):
@@ -144,9 +148,16 @@ class Placeholder(ttk.Entry):
 
 class TkinterGUI(GUI):
 
+    ICON_FILE = 'icon.ico'
     FD_INITIAL_DIR =  '~\\Documents'
     FD_FILETYPES = [('Excel', ('.xlsx', '.xls', '.xlsb', '.xlsm'))]
     FD_DEFAULT_EXT = '.xlsx'
+
+    def set_iconbitmap(self):
+        with open('tmp.ico', 'wb') as tmp:
+            tmp.write(base64.b64decode(img))
+        self.window.iconbitmap('tmp.ico')
+        os.remove('tmp.ico')
 
     def build(self) -> GUI:
         from ctypes import windll
@@ -155,6 +166,7 @@ class TkinterGUI(GUI):
         self.window = tk.Tk()
         self.window.title('Создание сводных отчетов')
         self.window.resizable(False, False)
+        self.set_iconbitmap()
 
         self.frame = ttk.Frame(self.window, padding=12)
         self.frame.grid(column=0, row=0, sticky=(tk.N, tk.W, tk.E, tk.S))

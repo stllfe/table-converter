@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import sys
 from typing import Any, Iterable, NamedTuple, Optional, Set, Tuple, Union
 
 import pandas as pd
@@ -7,7 +8,7 @@ import pandas as pd
 from .excel import get_excel_instance
 
 from . import errors
-from .tables import Calculation, PivotTable, Fields, Value
+from .tables import Calculation, PivotTable, Value
 
 
 def read_excel(path: Union[str, os.PathLike], sheet_name: str = None) -> pd.DataFrame:
@@ -173,3 +174,10 @@ def validate_filepath(path: Union[str, os.PathLike], exists=False, not_empty=Fal
         raise errors.OpenExcelError(path)
     if Path(path).is_dir():
         raise errors.OpenExcelError(path)
+
+
+def resource_path(relative_path: Union[str, Path]) -> str:
+    """Gets absolute path to resource, works for dev and for PyInstaller."""
+    
+    base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base_path, relative_path)
