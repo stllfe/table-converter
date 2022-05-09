@@ -11,6 +11,8 @@ CLEANED_SHEET_NAME = 'Исходный лист'
 EXCEL_VISIBLE = False
 SHOW_PIVOT_ANNOTATIONS = False
 HEADER_SEARCH_NROWS = 15
+ADD_GRAND_TOTAL_COLUMN = True
+COLLAPSE_DETAILS = True
 
 
 class Params(NamedTuple):
@@ -46,3 +48,6 @@ def run(params: Params) -> None:
         ws = excel.get_sheet(wb, CLEANED_SHEET_NAME)
         for table in params.pivot_tables:
             excel.create_pivot_table(wb, ws, table, show_annotations=SHOW_PIVOT_ANNOTATIONS)
+            excel.collapse_details(wb, table)
+            excel.filter_empty_values(wb, table)
+            excel.add_grand_total(wb, table, column=ADD_GRAND_TOTAL_COLUMN)

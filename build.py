@@ -10,10 +10,10 @@ dll_path = Path(get_python_lib()) / 'pywin32_system32'
 binaries = tuple(dll_path.glob('*.dll'))
 
 
-# hacky fix bitmap icon loading with pyinstaller packaging
+# hacky fix for bitmap icon loading with pyinstaller packaging
 # https://stackoverflow.com/questions/9929479/embed-icon-in-python-script
 with open('src/icon.py', 'w') as icon_module:
-    icon_module.write("img='")
+    icon_module.write("img = '")
 with open('icon.ico', 'rb') as icon, open('src/icon.py', 'ab+') as icon_module:
     b64str = base64.b64encode(icon.read())
     icon_module.write(b64str)

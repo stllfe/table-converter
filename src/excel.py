@@ -6,6 +6,7 @@ from typing import Union
 
 from contextlib import contextmanager
 
+import pythoncom as com
 import win32com.client as win32
 from win32com.client import constants as win32c
 
@@ -103,16 +104,54 @@ def create_pivot_table(workbook: object, worksheet: object, table: PivotTable, s
 
     # Sets the Values of the pivot table
     for value in table.fields.values:
+        name = f'{value.calculation.value.lower().title()} по полю {value.field}'
         calculation = as_excel_calculation(value.calculation)
         field = (
             pt.PivotTables(pt.Name)
             .AddDataField(
                 pt.PivotTables(pt.Name).PivotFields(value.field), 
-                value.name, calculation
+                name, 
+                calculation
             )
         )
         field.NumberFormat = value.number_format
 
     # Visiblity True or Valse
     pt.PivotTables(pt.Name).ShowValuesRow = show_annotations
-    pt.PivotTables(pt.Name).ColumnGrand = show_annotations
+    return pt
+
+
+def collapse_details(workbook: object, table: PivotTable) -> None:
+    ws = get_sheet(workbook, table.name)
+    pt = ws.PivotTables(table.name)
+    try:
+        pf = pt.PivotFields(table.fields.rows[0])
+    except IndexError:
+        return
+
+    for item in pf.PivotItems():
+        item.ShowDetail = False
+
+
+def add_grand_total(workbook: object, table: PivotTable, row: bool = False, column: bool = False) -> None:
+    ws = get_sheet(workbook, table.name)
+    pt = ws.PivotTables(table.name)
+    pt.ColumnGrand = column
+    pt.RowGrand = row
+
+
+def filter_empty_values(workbook: object, table: PivotTable) -> None:
+    ws = get_sheet(workbook, table.name)
+    pt = ws.PivotTables(table.name)
+
+    try:
+        pf = pt.PivotFields(table.fields.rows[0])
+    except IndexError:
+        return
+    
+    try:
+        blank = pf.PivotItems("(blank)")
+    except com.com_error: # no blanks then
+        return
+
+    blank.Visible = False

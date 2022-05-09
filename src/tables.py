@@ -3,14 +3,13 @@ from typing import Sequence, NamedTuple
 
 
 class Calculation(Enum):
-    SUM = 'sum'
-    AVG = 'avg'
-    COUNT = 'count'
+    SUM = 'Сумма'
+    AVG = 'Среднее'
+    COUNT = 'Количество'
 
 
 class Value(NamedTuple):
     field: str
-    name: str
     calculation: Calculation
     number_format: str = '0'
 
@@ -33,8 +32,8 @@ tables = (
         Fields(
             rows=('МНН+Дозировка',),
             values=(
-                Value('УНРЗ', 'Количество по полю УНРЗ', Calculation.COUNT),
-                Value('Потребность на год (ЕИ)', 'Сумма по полю Потребность на год (ЕИ)', Calculation.SUM),
+                Value('УНРЗ', Calculation.COUNT),
+                Value('Потребность на год (ЕИ)', Calculation.SUM),
             )
         )
     ),
@@ -43,7 +42,7 @@ tables = (
         Fields(
             rows=('Схема на УРНЗ', 'УНРЗ'),
             values=(
-                Value('Потребность на год (ЕИ)', 'Количество по полю Потребность на год (ЕИ)', Calculation.COUNT),
+                Value('Потребность на год (ЕИ)', Calculation.COUNT),
             )
         )
     ),

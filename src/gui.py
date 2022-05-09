@@ -8,7 +8,6 @@ import threading
 
 import tkinter as tk
 import multiprocessing as mp
-import sys
 
 from tkinter import ttk
 from tkinter import filedialog as fd
@@ -20,10 +19,11 @@ from . import errors
 from .tables import PivotTable
 from .core import Params
 from .icon import img
+from .version import __version__, format_version
 
 
 class Process(mp.Process):
-    """A process that keeps the info about exception."""
+    """A process that keeps the info about an exception."""
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -164,7 +164,7 @@ class TkinterGUI(GUI):
         windll.shcore.SetProcessDpiAwareness(2)
 
         self.window = tk.Tk()
-        self.window.title('Создание сводных отчетов')
+        self.window.title(f'Создание сводных отчетов ({format_version(__version__)})')
         self.window.resizable(False, False)
         self.set_iconbitmap()
 
