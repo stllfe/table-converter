@@ -13,7 +13,7 @@ def format_version(version: str) -> str:
         raise ValueError(f'Incorrect version given "{version}".') from None
 
 
-def is_dev_version(version: str) -> str:
+def is_dev_version(version: str) -> bool:
     """Denotes if the given version is dev."""
     
     return 'dev' in version
