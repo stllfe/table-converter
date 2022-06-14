@@ -18,20 +18,23 @@ from .excel import get_excel_instance
 from .tables import Calculation, PivotTable, Value
 
 
-def read_excel(path: Union[str, os.PathLike], sheet_name: str = None) -> pd.DataFrame:
+def read_excel(path: Union[str, os.PathLike], sheet_name: str = None, asis=False) -> pd.DataFrame:
     """Reads an excel file from the given path into a pandas DataFrame.
 
     Args:
         path: A path to read from.
         sheet_name: A specific worksheet in the file (first by default).
+        asis: Whether to keep all values as strings or try to infer the type (default=False).
 
     Raises:
         OpenExcelFileError: If can't open the file.
         SheetNotFoundError: If can't find the specified sheet.
     """
-    
+
+    sheet_name = sheet_name or 0
+    dtype = 'object' if asis else None
     try:
-        return pd.read_excel(path, sheet_name=sheet_name or 0)
+        return pd.read_excel(path, sheet_name=sheet_name, dtype=dtype)
     except FileNotFoundError:
         raise errors.OpenExcelError(path) from None
     except ValueError:
@@ -90,7 +93,7 @@ def find_header(data: pd.DataFrame, search_nrows=15) -> Optional[HeaderILocation
     """
 
     def is_empty(val: Any) -> bool:
-        return pd.isna(val) or not val.strip()
+        return pd.isna(val) or not str(val).strip()
 
 
     def longest_nonempty_span(row: Tuple) -> Tuple[int, int]:

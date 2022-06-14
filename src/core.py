@@ -31,7 +31,7 @@ def run(params: Params) -> None:
     input_path = Path(params.input_path).resolve()
     output_path = Path(params.output_path).resolve()
  
-    data = utils.read_excel(input_path, params.sheet_name)
+    data = utils.read_excel(input_path, params.sheet_name, asis=True)
     
     data = utils.shrink_to_header(data, utils.find_header(data, HEADER_SEARCH_NROWS))
     data = utils.fill_missing_values(data)
